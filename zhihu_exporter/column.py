@@ -37,16 +37,8 @@ _ARTICLE_INCLUDE = (
     "data[*].voteup_count,data[*].comment_count,data[*].excerpt"
 )
 
-# 预览用 include：不需要 content（正文），只需元信息
-_PREVIEW_INCLUDE = (
-    "data[*].title,data[*].created,data[*].updated,"
-    "data[*].author,data[*].url,data[*].image_url,"
-    "data[*].voteup_count,data[*].comment_count,data[*].excerpt"
-)
+PAGE_SIZE = 20  # 列表接口每页条数
 
-PAGE_SIZE = 20
-
-# 公共函数：提取专栏 ID（给 main.py / 外部调用）
 def extract_column_id(url):
     """从专栏 URL 中提取 column_id。
 
@@ -118,15 +110,19 @@ async def _crawl_column_async(
 
     referer_url = f"https://www.zhihu.com/column/{column_id}"
     base_headers = get_headers(referer_url)
-    base_headers["cookie"] = cookie
+    if cookie:
+        base_headers["cookie"] = cookie
 
     async with aiohttp.ClientSession() as session:
-        # --- 验证 Cookie ---
-        print("\n正在验证 Cookie...")
-        if not await _verify_cookie_simple(session, base_headers, column_id):
-            print("Cookie 验证失败，请检查 Cookie 是否有效。")
-            sys.exit(1)
-        print("Cookie 验证通过。")
+        # --- 验证 Cookie（游客模式跳过；公开专栏接口本就不需要登录态）---
+        if cookie:
+            print("\n正在验证 Cookie...")
+            if not await _verify_cookie_simple(session, base_headers, column_id):
+                print("Cookie 验证失败，请检查 Cookie 是否有效。")
+                sys.exit(1)
+            print("Cookie 验证通过。")
+        else:
+            print("\n游客模式：未提供 Cookie，仅抓取公开可见内容；付费 / 需登录专栏请用 -c 或 -C 提供 Cookie。")
 
         # --- 获取专栏信息 ---
         print(f"\n正在获取专栏信息...")
@@ -145,9 +141,11 @@ async def _crawl_column_async(
         col_title = col_info.get("title") or col_info.get("name") or column_id
         col_description = col_info.get("description", "")
         col_url = col_info.get("url", referer_url)
-        col_articles_count = col_info.get("articles_count", 0)
+        # 登录态下该接口不返回计数字段（仅游客态返回），取不到时显示未知而非 0
+        col_articles_count = (col_info.get("articles_count")
+                              or col_info.get("items_count") or 0)
         print(f"专栏名称：{col_title}")
-        print(f"专栏文章数：{col_articles_count}")
+        print(f"专栏文章数：{col_articles_count or '未知（登录状态接口不返回总数）'}")
         print(f"专栏链接：{col_url}")
 
         # --- 准备输出目录 ---
@@ -296,122 +294,6 @@ async def _crawl_column_async(
         print(f"输出目录：{output_root}")
 
         return new_count
-
-
-async def _preview_column_async(
-    column_id, cookie, limit=None,
-    keyword=None, page_delay=None, max_retries=None,
-    concurrency=5,
-):
-    """预览指定专栏的文章列表（只列出元信息，不写入文件）。
-
-    Args:
-        column_id: 专栏 ID
-        cookie: 登录 Cookie
-        limit: 限制条数
-        keyword: 标题关键词过滤
-
-    Returns:
-        int: 匹配到的文章总数
-    """
-    if aiohttp is None:
-        print("错误：缺少必要依赖 aiohttp")
-        sys.exit(1)
-
-    referer_url = f"https://www.zhihu.com/column/{column_id}"
-    base_headers = get_headers(referer_url)
-    base_headers["cookie"] = cookie
-
-    async with aiohttp.ClientSession() as session:
-        # --- 验证 Cookie + 获取专栏信息 ---
-        print("正在验证 Cookie...", end=" ")
-        if not await _verify_cookie_simple(session, base_headers, column_id):
-            print("失败")
-            print("Cookie 验证失败，请检查 Cookie 是否有效。")
-            sys.exit(1)
-        print("通过")
-
-        col_info = await _fetch_page(
-            session,
-            f"https://www.zhihu.com/api/v4/columns/{column_id}",
-            base_headers,
-            asyncio.Semaphore(1),
-            max_retries=max_retries or MAX_RETRIES,
-        )
-        if col_info is None or "error" in col_info:
-            print(f"错误：无法获取专栏信息")
-            sys.exit(1)
-
-        col_title = col_info.get("title") or col_info.get("name") or column_id
-        col_desc = col_info.get("description", "") or ""
-        col_url = col_info.get("url", referer_url)
-        col_count = col_info.get("articles_count", 0)
-
-        print(f"\n{'=' * 55}")
-        print(f"  专栏：{col_title}（共 {col_count} 篇）")
-        print(f"  共 {col_count} 篇文章")
-        if keyword:
-            print(f"  关键词过滤：{keyword}")
-        print(f"{'=' * 55}")
-
-        # --- 遍历文章列表 ---
-        include_param = _PREVIEW_INCLUDE
-        semaphore = asyncio.Semaphore(concurrency)
-        offset = 0
-        is_end = False
-        total_matched = 0
-        articles = []
-
-        while not is_end and (limit is None or total_matched < limit):
-            url = (
-                f"https://www.zhihu.com/api/v4/columns/{column_id}/articles"
-                f"?limit={PAGE_SIZE}&offset={offset}&include={quote(include_param, safe='')}"
-            )
-            data = await _fetch_page(session, url, base_headers, semaphore,
-                                     max_retries=max_retries or MAX_RETRIES)
-            if data is None:
-                print("\n请求失败次数过多，中止。")
-                break
-            if "error" in data:
-                print(f"\nAPI 返回错误：{data.get('error', {}).get('message', '未知错误')}")
-                break
-
-            paging = data.get("paging", {})
-            is_end = paging.get("is_end", True)
-            items = data.get("data", [])
-
-            for item in items:
-                if keyword and keyword not in (item.get("title") or ""):
-                    continue
-                if limit is not None and total_matched >= limit:
-                    break
-                articles.append(item)
-                total_matched += 1
-
-            offset += PAGE_SIZE
-            if is_end:
-                break
-            await asyncio.sleep(page_delay if page_delay is not None else PAGE_DELAY)
-
-    # --- 打印预览表格 ---
-    if not articles:
-        print("\n没有匹配的文章。")
-        return 0
-
-    print()
-    for i, item in enumerate(articles, 1):
-        title = item.get("title", "（无标题）")
-        print(f"  [{i}] {title}")
-
-    print(f"\n共 {total_matched} 篇")
-
-    print(f"  {'─' * 53}")
-    print(f"\n共 {total_matched} 篇")
-    if limit and total_matched >= limit:
-        print(f"（已达到预览上限 {limit} 条）")
-    print()
-
-    return total_matched
 
 
 async def _process_column_item(session, item, fmt_configs, active_formats,

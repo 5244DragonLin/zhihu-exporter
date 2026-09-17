@@ -8,7 +8,7 @@ from zhihu_exporter.config import DEFAULT_OUTPUT_DIR, DEFAULT_CONCURRENCY, _reso
 from zhihu_exporter.utils import extract_username
 from zhihu_exporter.auth import _acquire_cookie
 from zhihu_exporter.export import _crawl_async
-from zhihu_exporter.author import _crawl_author_async, _preview_author_async, MODE_TO_KINDS
+from zhihu_exporter.author import _crawl_author_async, MODE_TO_KINDS
 from zhihu_exporter.column import _crawl_column_async, extract_column_id
 
 # 自动识别专栏 URL（不需要 --mode column）
@@ -66,7 +66,6 @@ def main_function(user_url, cookie=None, cookie_file=None, output_dir=DEFAULT_OU
         gitee_path_prefix: Gitee 仓库中的路径前缀（可选）
         mode: 抓取模式，"upvotes"/"articles"/"answers"/"all"/"column"
         keyword: 关键词过滤（仅作者/专栏模式生效，仅导出标题包含该词的内容）
-        preview: 预览模式（仅专栏模式生效，列出文章元信息，不写入文件）
         only_answers: 仅导出赞同的回答（仅 upvotes 模式生效）
         only_articles: 仅导出赞同的文章（仅 upvotes 模式生效）
 
@@ -83,25 +82,15 @@ def main_function(user_url, cookie=None, cookie_file=None, output_dir=DEFAULT_OU
             print(f"错误：无法从 URL 提取专栏 ID：{user_url}")
             sys.exit(1)
 
-        cookie = _acquire_cookie(cookie, cookie_file, no_scan, visible)
-
-        # 预览模式
-        if preview:
-            return asyncio.run(_preview_column_async(
-                column_id=column_id,
-                cookie=cookie,
-                limit=limit,
-                keyword=keyword,
-                page_delay=page_delay,
-                max_retries=max_retries,
-                concurrency=concurrency,
-            ))
+        # 专栏模式：公开专栏可免 Cookie（游客模式），传了 Cookie 才走获取与校验流程
+        cookie = _acquire_cookie(cookie, cookie_file, no_scan, visible) if (cookie or cookie_file) else ""
 
         print("=" * 50)
         print("  知乎专栏内容导出工具（专栏模式，支持增量，aiohttp 异步）")
         print("=" * 50)
         print(f"\n专栏链接：{user_url}")
         print(f"专栏 ID：{column_id}")
+        print(f"登录状态：{'已提供 Cookie' if cookie else '游客模式（无 Cookie，仅限公开专栏）'}")
         if keyword:
             print(f"关键词过滤：{keyword}")
         print()
@@ -181,19 +170,6 @@ def main_function(user_url, cookie=None, cookie_file=None, output_dir=DEFAULT_OU
             img_cfg["gitee_branch"] = gitee_branch or "master"
             if gitee_path_prefix:
                 img_cfg["gitee_path_prefix"] = gitee_path_prefix
-
-    # 预览模式（作者原创预览）
-    if preview and is_author_mode:
-        return asyncio.run(_preview_author_async(
-            username=username,
-            cookie=cookie,
-            kinds=MODE_TO_KINDS[mode],
-            limit=limit,
-            keyword=keyword,
-            page_delay=page_delay,
-            max_retries=max_retries,
-            concurrency=concurrency,
-        ))
 
     if is_author_mode:
         return asyncio.run(_crawl_author_async(
@@ -353,11 +329,6 @@ def main():
         help="关键词过滤：仅导出标题包含该词的内容（仅 --mode articles/answers/all/column 生效）",
     )
     scrape_group.add_argument(
-        "--preview",
-        action="store_true",
-        help="预览模式：仅列出专栏文章元信息（标题/日期/赞数/评论），不写入文件（仅专栏模式生效）",
-    )
-    scrape_group.add_argument(
         "--only-answers",
         action="store_true",
         help="仅导出赞同的回答，跳过文章（仅 --mode upvotes 生效）",
@@ -429,8 +400,7 @@ def main():
             gitee_path_prefix=args.gitee_path_prefix,
             mode=args.mode,
             keyword=args.keyword,
-            preview=args.preview,
-            only_answers=args.only_answers,
+only_answers=args.only_answers,
             only_articles=args.only_articles,
         )
     except KeyboardInterrupt:

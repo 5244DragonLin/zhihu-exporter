@@ -43,26 +43,10 @@ _ANSWER_INCLUDE = (
     "data[*].voteup_count,data[*].comment_count"
 )
 
-# 预览用 include：不需要 content
-_ARTICLE_INCLUDE_PREVIEW = (
-    "data[*].title,data[*].created,data[*].author,data[*].url,"
-    "data[*].voteup_count,data[*].comment_count"
-)
-_ANSWER_INCLUDE_PREVIEW = (
-    "data[*].created_time,data[*].author,data[*].question,data[*].url,"
-    "data[*].voteup_count,data[*].comment_count"
-)
-
 # 每种内容类型对应的输出子目录名与 API 路径
 _KIND_META = {
     "articles": {"api": "articles", "label": "文章", "include": _ARTICLE_INCLUDE},
     "answers": {"api": "answers", "label": "回答", "include": _ANSWER_INCLUDE},
-}
-
-# 预览用元信息（更精简的 include，无 content）
-_KIND_META_PREVIEW = {
-    "articles": {"api": "articles", "label": "文章", "include": _ARTICLE_INCLUDE_PREVIEW},
-    "answers": {"api": "answers", "label": "回答", "include": _ANSWER_INCLUDE_PREVIEW},
 }
 
 # 支持的作品类型 -> mode 值
@@ -253,7 +237,6 @@ async def _crawl_kind(session, username, kind, base_headers, semaphore, fmt_conf
     return new_count
 
 
-
 async def _crawl_author_async(
     username, cookie, output_dir, limit, incremental,
     fmt, concurrency, page_delay=None, max_retries=None, image_config=None,
@@ -338,87 +321,3 @@ async def _crawl_author_async(
         return total_new
 
 
-async def _preview_author_async(
-    username, cookie, kinds=("articles",), limit=None,
-    keyword=None, page_delay=None, max_retries=None,
-    concurrency=5,
-):
-    """预览指定用户的原创内容列表（只列出标题，不写入文件）。
-
-    Args:
-        username: 知乎用户名
-        cookie: 登录 Cookie
-        kinds: 类型列表（"articles" / "answers"）
-        limit: 限制条数
-        keyword: 标题关键词过滤
-
-    Returns:
-        int: 匹配到的条目总数
-    """
-    if aiohttp is None:
-        print("错误：缺少必要依赖 aiohttp")
-        sys.exit(1)
-
-    referer_url = f"https://www.zhihu.com/people/{username}"
-    base_headers = get_headers(referer_url)
-    base_headers["cookie"] = cookie
-
-    async with aiohttp.ClientSession() as session:
-        print("正在验证 Cookie...", end=" ")
-        if not await _verify_cookie(session, username, base_headers):
-            print("失败")
-            print("Cookie 验证失败，请检查 Cookie 是否有效。")
-            sys.exit(1)
-        print("通过")
-
-        total_matched = 0
-
-        for kind in kinds:
-            meta = _KIND_META_PREVIEW[kind]
-            is_answer = (kind == "answers")
-            label = meta["label"]
-
-            print(f"\n{'=' * 55}")
-            print(f"  {username} 的原创{label}")
-            if keyword:
-                print(f"  关键词过滤：{keyword}")
-            print(f"{'=' * 55}")
-
-            offset = 0
-            is_end = False
-            semaphore = asyncio.Semaphore(concurrency)
-            items_previewed = 0
-
-            while not is_end and (limit is None or total_matched < limit):
-                url = (f"https://www.zhihu.com/api/v4/members/{username}/{meta['api']}"
-                       f"?limit={PAGE_SIZE}&offset={offset}"
-                       f"&include={quote(meta['include'], safe='')}")
-                data = await _fetch_page(session, url, base_headers, semaphore,
-                                         max_retries=max_retries or MAX_RETRIES)
-                if data is None or "error" in data:
-                    break
-
-                paging = data.get("paging", {})
-                is_end = paging.get("is_end", True)
-                items = data.get("data", [])
-
-                for item in items:
-                    if keyword and keyword not in _item_title(item, is_answer):
-                        continue
-                    if limit is not None and total_matched >= limit:
-                        break
-
-                    title = _item_title(item, is_answer)
-                    print(f"  [{total_matched + 1}] {title}")
-                    total_matched += 1
-                    items_previewed += 1
-
-                offset += PAGE_SIZE
-                if is_end:
-                    break
-                await asyncio.sleep(page_delay if page_delay is not None else PAGE_DELAY)
-
-            print(f"  共 {items_previewed} 篇\n")
-
-    print(f"总共 {total_matched} 篇")
-    return total_matched
