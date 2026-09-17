@@ -100,12 +100,12 @@ output/
 
 ```bash
 # Gitee 镜像（国内访问快）
-git clone https://gitee.com/yhl5244/zhihu-exporter.git
-cd zhihu-exporter
+git clone https://gitee.com/yhl5244/zhihu_exporter.git
+cd zhihu_exporter
 
 # GitHub 原仓库
-git clone https://github.com/5244DragonLin/zhihu-exporter.git
-cd zhihu-exporter
+git clone https://github.com/5244DragonLin/zhihu_exporter.git
+cd zhihu_exporter
 ```
 
 ### 2. 安装依赖
