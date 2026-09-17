@@ -1,0 +1,25 @@
+# ============================================================
+# 知乎点赞导出工具 - Cookie 示例文件
+# 用法：python zhihu_exporter.py <用户主页URL> -C cookie.example.txt
+# ============================================================
+# 
+# 本文件支持两种格式（二选一，请删除不用的部分并填入真实 Cookie）：
+# 
+# 格式一：整行 Cookie 字符串（推荐）
+#   直接将 Network 面板中复制的完整 Cookie 字符串贴到下一行即可，
+#   工具会自动识别（判断条件：文件只有一行且包含分号）
+# 
+# 格式二：逐行 name=value（适合手动整理或脚本拼接）
+#   每行写一对 name=value，工具会按行解析并用分号拼接
+# 
+# ============================================================
+
+# ---- 格式一：整行 Cookie 字符串（推荐）----
+# 使用方法：删除下面这行的 # 号，把 YOUR_COOKIE_HERE 替换为真实的 Cookie 字符串
+# YOUR_COOKIE_HERE
+
+# ---- 格式二：逐行 name=value ----
+# 使用方法：删除下面每行的 # 号，替换为真实值
+# YOUR_ZCOOKIE=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# YOUR_ZSID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# YOUR_XSRF_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

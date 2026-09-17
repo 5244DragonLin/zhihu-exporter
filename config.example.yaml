@@ -1,0 +1,51 @@
+# ============================================================
+# 知乎点赞导出工具 - 示例配置文件
+# ============================================================
+# 用法：复制为 config.yaml 并按需修改。
+#   python zhihu_exporter.py             # 不传 --config 时自动加载 config.yaml
+#   python zhihu_exporter.py --config config.yaml   # 仅改名/换路径时显式指定
+# 命令行参数优先级高于本配置文件。键名遵循《爬虫项目指南》统一规范。
+# 本文件提交到仓库，不含任何真实凭据。
+# ============================================================
+
+# ---- 必填 ----
+# user_url: "https://www.zhihu.com/people/xxx"
+
+# ---- 登录（auth 节；二选一，优先 cookie_file）----
+auth:
+  cookie: ""
+  # cookie_file: "cookie.txt"
+
+# ---- 网络请求（request 节）----
+request:
+  delay: 0.8       # 每页请求间隔（秒）
+  max_retries: 3   # 单页最大重试次数
+
+# ---- 输出 ----
+output_dir: "output"
+format: "both"     # md / html / both
+# limit: 50       # 限制抓取条数
+
+# ---- 图片下载（默认关闭，按需取消注释）----
+# download_images: false
+# image_host: local            # local 或 gitee
+# Gitee 图床模式：
+# download_images: true
+# image_host: gitee
+# gitee_token: "your_gitee_personal_access_token"
+# gitee_repo: "your_username/your_repo"
+# gitee_branch: "master"
+# gitee_path_prefix: "zhihu-images"  # 可选，仓库内的子目录
+
+# ---- 抓取 ----
+incremental: true  # 增量模式：true = 只抓上次之后的新点赞；false = 全量重抓
+concurrency: 5
+# no_scan: true    # 跳过 Playwright 扫码，仅手动粘贴 Cookie
+
+# ---- 抓取模式（v3.4）----
+# upvotes  = 导出用户【点赞过】的他人内容（默认，走 moments 动态流）
+# articles = 导出用户【自己创作】的文章（走 /api/v4/members 列表，免浏览器/免签名）
+# answers  = 导出用户【自己创作】的回答
+# all      = 同时导出原创文章与原创回答
+# mode: upvotes
+# keyword: "缚茧"   # 仅导出标题包含该词的内容（仅较 mode 为 articles/answers/all 时生效）
